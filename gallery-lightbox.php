@@ -29,7 +29,7 @@ $myUpdateChecker->setBranch('main');
 // --- 1. IMPOSTAZIONI ---
 add_action('admin_menu', 'cg_create_menu');
 function cg_create_menu() {
-    add_menu_page( 'Creative Gallery', 'Creative Gallery', 'manage_options', 'creative-gallery-settings', 'cg_settings_page', 'dashicons-images-alt2', 25 );
+    add_menu_page( 'Creative Gallery', 'Creative Gallery', 'manage_options', 'creative-gallery-settings', 'cg_settings_page', plugin_dir_url(__FILE__) . 'icon.png', 25 );
 }
 
 add_action('admin_init', 'cg_register_settings');
