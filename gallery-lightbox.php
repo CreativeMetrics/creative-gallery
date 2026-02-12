@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Creative Gallery
  * Description: Suite Portfolio Auto Image Lightbox and video.
- * Version: 11.6.2
+ * Version: 11.6.3
  * Author: Creative Metrics
  */
 
@@ -59,7 +59,7 @@ function cg_register_settings() {
 
 function cg_settings_page() {
     $active_tab = isset( $_GET[ 'tab' ] ) ? $_GET[ 'tab' ] : 'settings';
-    $icon_url = plugin_dir_url(__FILE__) . 'icon.png';
+    $icon_url = plugin_dir_url(__FILE__) . 'icon-big.png';
     ?>
     <div class="wrap">
         <img src="<?php echo esc_url($icon_url); ?>" style="vertical-align:middle; height:40px; width:auto; margin-right:10px;">
