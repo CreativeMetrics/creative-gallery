@@ -14,7 +14,7 @@ require 'plugin-update-checker/plugin-update-checker.php';
 use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 
 $myUpdateChecker = PucFactory::buildUpdateChecker(
-    'https://github.com/CreativeMetrics/creative-gallery.git', // URL del tuo repository
+    'https://github.com/CreativeMetrics/creative-gallery/', // URL del tuo repository
     __FILE__, // Percorso completo del file
     'creative-gallery' // Slug del plugin
 );
