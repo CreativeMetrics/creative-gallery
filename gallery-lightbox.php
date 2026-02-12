@@ -18,7 +18,7 @@ $myUpdateChecker = PucFactory::buildUpdateChecker(
     __FILE__, // Percorso completo del file
     'creative-gallery' // Slug del plugin
 );
-$myUpdateChecker->setBranch('main')
+$myUpdateChecker->setBranch('main');
 // Se il repository è PRIVATO, togli il commento alla riga sotto e inserisci il token
 // $myUpdateChecker->setAuthentication('IL-TUO-TOKEN-GITHUB');
 
