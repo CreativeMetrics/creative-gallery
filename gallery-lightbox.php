@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Creative Gallery
  * Description: Suite Portfolio v11.3 - Base v10.2 + Video (Auto Frame) + Single Image Width.
- * Version: 11.4
+ * Version: 11.5
  * Author: Creative Metrics
  */
 
