@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Creative Gallery
- * Description: Suite Portfolio v11.3 - Base v10.2 + Video (Auto Frame) + Single Image Width.
- * Version: 11.6.1
+ * Description: Suite Portfolio Auto Image Lightbox and video.
+ * Version: 11.6.2
  * Author: Creative Metrics
  */
 
@@ -59,9 +59,12 @@ function cg_register_settings() {
 
 function cg_settings_page() {
     $active_tab = isset( $_GET[ 'tab' ] ) ? $_GET[ 'tab' ] : 'settings';
+    $icon_url = plugin_dir_url(__FILE__) . 'icon.png';
     ?>
     <div class="wrap">
-        <h1>Creative Gallery <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px;">v11.6.1</span></h1>
+        <img src="<?php echo esc_url($icon_url); ?>" style="vertical-align:middle; height:40px; width:auto; margin-right:10px;">
+        Creative Gallery 
+        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v11.6.2</span></h1>
         <h2 class="nav-tab-wrapper">
             <a href="?page=creative-gallery-settings&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">Configurazione</a>
             <a href="?page=creative-gallery-settings&tab=guide" class="nav-tab <?php echo $active_tab == 'guide' ? 'nav-tab-active' : ''; ?>">Guida & Definizioni</a>
