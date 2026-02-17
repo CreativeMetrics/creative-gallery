@@ -2,29 +2,23 @@
 /**
  * Plugin Name: Creative Gallery
  * Description: Suite Portfolio Auto Image Lightbox and video.
- * Version: 11.6.4
+ * Version: 11.9.5
  * Author: Creative Metrics
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-/* * INIZIO AGGIORNAMENTI AUTOMATICI GITHUB 
- */
+/* * INIZIO AGGIORNAMENTI AUTOMATICI GITHUB */
 require 'plugin-update-checker/plugin-update-checker.php';
 use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 
 $myUpdateChecker = PucFactory::buildUpdateChecker(
-    'https://github.com/CreativeMetrics/creative-gallery/', // URL del tuo repository
-    __FILE__, // Percorso completo del file
-    'creative-gallery' // Slug del plugin
+    'https://github.com/CreativeMetrics/creative-gallery/',
+    __FILE__,
+    'creative-gallery'
 );
 $myUpdateChecker->setBranch('main');
-// Se il repository è PRIVATO, togli il commento alla riga sotto e inserisci il token
-// $myUpdateChecker->setAuthentication('IL-TUO-TOKEN-GITHUB');
-
 /* FINE AGGIORNAMENTI AUTOMATICI */
-
-
 
 // --- 1. IMPOSTAZIONI ---
 add_action('admin_menu', 'cg_create_menu');
@@ -34,6 +28,7 @@ function cg_create_menu() {
 
 add_action('admin_init', 'cg_register_settings');
 function cg_register_settings() {
+    // Opzioni Classiche
     register_setting('cg_opt_group', 'cg_post_types');
     register_setting('cg_opt_group', 'cg_columns', ['default' => 4]);
     register_setting('cg_opt_group', 'cg_thumb_size', ['default' => 'large']);
@@ -55,25 +50,38 @@ function cg_register_settings() {
     register_setting('cg_opt_group', 'cg_social', ['default' => 1]); 
     register_setting('cg_opt_group', 'cg_debug_mode', ['default' => 0]); 
     register_setting('cg_opt_group', 'cg_single_width', ['default' => 95]);
+    
+    // NOTA: Le opzioni Schema NON sono registrate qui per bypassare il blocco di options.php
 }
 
 function cg_settings_page() {
+    // SALVATAGGIO FORZATO E MANUALE DELLO SCHEMA
+    if (isset($_POST['cg_schema_submit']) && current_user_can('manage_options')) {
+        update_option('cg_schema_active', isset($_POST['cg_schema_active']) ? 1 : 0);
+        update_option('cg_schema_pts', isset($_POST['cg_schema_pts']) && is_array($_POST['cg_schema_pts']) ? $_POST['cg_schema_pts'] : []);
+        update_option('cg_schema_brand_text', isset($_POST['cg_schema_brand_text']) ? sanitize_text_field($_POST['cg_schema_brand_text']) : '');
+        echo '<div class="notice notice-success is-dismissible"><p><strong>✅ Impostazioni Schema salvate correttamente!</strong></p></div>';
+    }
+
     $active_tab = isset( $_GET[ 'tab' ] ) ? $_GET[ 'tab' ] : 'settings';
     $icon_url = plugin_dir_url(__FILE__) . 'icon-big.png';
     ?>
     <div class="wrap">
+        <h1>
         <img src="<?php echo esc_url($icon_url); ?>" style="vertical-align:middle; height:40px; width:auto; margin-right:10px;">
         Creative Gallery 
-        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v11.6.4</span></h1>
+        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v11.9.5</span></h1>
         <h2 class="nav-tab-wrapper">
             <a href="?page=creative-gallery-settings&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">Configurazione</a>
             <a href="?page=creative-gallery-settings&tab=guide" class="nav-tab <?php echo $active_tab == 'guide' ? 'nav-tab-active' : ''; ?>">Guida & Definizioni</a>
         </h2>
 
         <?php if( $active_tab == 'settings' ): ?>
+        
         <form method="post" action="options.php">
             <?php settings_fields('cg_opt_group'); do_settings_sections('cg_opt_group'); ?>
             <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:20px;">
+                
                 <div style="flex:1; min-width:300px; background:#fff; padding:20px; border:1px solid #ccd0d4; border-radius:4px;">
                     <h2 style="margin-top:0; border-bottom:1px solid #eee; padding-bottom:12px;">Generale</h2>
                     <table class="form-table">
@@ -163,11 +171,36 @@ function cg_settings_page() {
                     <input type="checkbox" name="cg_debug_mode" value="1" <?php checked(1, get_option('cg_debug_mode', 0), true); ?>> 
                     <strong>Attiva Modalità Debug</strong>
                 </label>
-                <p class="description">Attiva questa opzione se non vedi le foto sul sito. Appariranno dei messaggi rossi di errore che spiegano il motivo (solo per amministratori).</p>
             </div>
 
             <p class="submit" style="margin-top:20px;"><input type="submit" class="button button-primary button-large" value="Salva Modifiche"></p>
         </form>
+
+        <div style="margin-top:30px; background:#f0f6fc; border:1px solid #2271b1; padding:20px; border-radius:4px;">
+            <h2 style="color:#2271b1; margin-top:0; border-bottom:1px solid #c3d9ed; padding-bottom:10px;">🚀 Impostazioni SEO (Schema.org Project)</h2>
+            <form method="post" action="">
+                <table class="form-table">
+                    <tr valign="top"><th scope="row">Attiva Schema:</th><td>
+                        <label><input type="checkbox" name="cg_schema_active" value="1" <?php checked(1, get_option('cg_schema_active', 0), true); ?>> Sì, genera il JSON-LD in automatico sulle pagine dei progetti</label>
+                    </td></tr>
+                    <tr valign="top"><th scope="row">Applica su Post Type:</th><td>
+                        <?php 
+                        $schema_pts = get_option('cg_schema_pts', []);
+                        if (!is_array($schema_pts)) $schema_pts = (array)$schema_pts;
+                        foreach ($types as $pt) {
+                            if($pt->name=='attachment') continue;
+                            $chk_schema = in_array($pt->name, $schema_pts) ? 'checked' : '';
+                            echo '<label style="margin-right:15px; display:inline-block; margin-bottom:5px;"><input type="checkbox" name="cg_schema_pts[]" value="'.$pt->name.'" '.$chk_schema.'> <strong>'.$pt->label.'</strong></label><br>';
+                        }
+                        ?>
+                    </td></tr>
+                    <tr valign="top"><th scope="row">Nome Brand:</th><td>
+                        <input type="text" name="cg_schema_brand_text" value="<?php echo esc_attr(get_option('cg_schema_brand_text')); ?>" placeholder="es. Nome Azienda" style="width:100%; max-width:300px;">
+                    </td></tr>
+                </table>
+                <p class="submit" style="margin-bottom:0;"><input type="submit" name="cg_schema_submit" class="button button-primary" value="Salva Impostazioni SEO"></p>
+            </form>
+        </div>
 
         <?php else: ?>
         <div style="margin-top:20px; background:#fff; padding:40px; border:1px solid #ccd0d4; max-width:1000px; line-height:1.6; font-size:14px;">
@@ -203,7 +236,7 @@ function cg_settings_page() {
     <?php
 }
 
-// --- 2. BACKEND (MODIFICATO PER THUMB VIDEO AUTO) ---
+// --- 2. BACKEND ---
 add_action('admin_enqueue_scripts', 'cg_admin_scripts');
 function cg_admin_scripts($hook) {
     global $post;
@@ -235,7 +268,6 @@ function cg_render_box($post) {
                 $url = wp_get_attachment_image_url($id, 'thumbnail');
                 $is_vid_attr = '';
                 if(!$url) {
-                    // È un video (o file senza thumb). Metto l'icona E l'attributo per il JS
                     $url = wp_mime_type_icon($id);
                     $full_src = wp_get_attachment_url($id);
                     if(preg_match('/\.(mp4|webm|ogv)$/i', $full_src)) {
@@ -270,7 +302,6 @@ function cg_render_box($post) {
     <script>jQuery(document).ready(function($){
         var frame, list=$('#cg-list'), input=$('#cg_gallery_ids'), cnt=$('#cg-count-num');
         
-        // Funzione per generare thumb video
         function checkVids(){
             $('#cg-list img[data-video-src]').each(function(){
                 var img = $(this); var src = img.attr('data-video-src');
@@ -284,7 +315,6 @@ function cg_render_box($post) {
                 };
             });
         }
-        // Avvio controllo su esistenti
         setTimeout(checkVids, 500);
 
         list.sortable({update:function(){upd()}});
@@ -296,7 +326,6 @@ function cg_render_box($post) {
                     att=att.toJSON();
                     var url = (att.sizes && att.sizes.thumbnail) ? att.sizes.thumbnail.url : att.icon;
                     var vAttr = '';
-                    // Se non ha thumb ed è video
                     if(!att.sizes || !att.sizes.thumbnail) {
                         if(att.url.match(/\.(mp4|webm|ogv)$/i)) vAttr = ' data-video-src="'+att.url+'" ';
                     }
@@ -333,11 +362,10 @@ function cg_get_gallery_ids($post_id) {
     return $ids;
 }
 
-// --- 4. RENDER HTML (MODIFICATO PER DATA-VIDEO-SRC) ---
+// --- 4. RENDER HTML ---
 function cg_render_html($ids, $start_index_global = 0) {
     if(empty($ids)) return '';
     
-    // Vars
     $masonry = get_option('cg_masonry');
     $hover_cap = get_option('cg_hover_caption');
     $thumb_size = get_option('cg_thumb_size', 'large');
@@ -345,7 +373,6 @@ function cg_render_html($ids, $start_index_global = 0) {
     $hover_effect = get_option('cg_hover_effect', 'zoom');
     $filters_active = get_option('cg_filters', 0);
 
-    // LOGICA CLASSE SINGOLA
     $is_single_class = (count($ids) === 1) ? ' cg-is-single' : '';
 
     $cls = $masonry ? 'cg-masonry' : 'cg-grid';
@@ -359,14 +386,12 @@ function cg_render_html($ids, $start_index_global = 0) {
 
     foreach($ids as $id) {
         $real_global_index = $start_index_global + $i;
-        $full = wp_get_attachment_url($id); // URL completo per i video
-        // Se è immagine usa image_url, se video e no thumb usa icona
+        $full = wp_get_attachment_url($id); 
         $thumb = wp_get_attachment_image_url($id, $thumb_size);
         $video_attr = '';
         
         if(!$thumb) {
-            $thumb = wp_mime_type_icon($id); // Icona fallback
-            // Controllo se è video per thumb automatica JS
+            $thumb = wp_mime_type_icon($id);
             if(preg_match('/\.(mp4|webm|ogv)$/i', $full)) {
                 $video_attr = ' data-video-src="'.esc_url($full).'" ';
             }
@@ -389,7 +414,6 @@ function cg_render_html($ids, $start_index_global = 0) {
 
         $items_html .= '<div class="cg-box cg-anim '.$hidden_class.' cg-cat-all '.$cat_slug.'" data-cat="'.$cat_slug.'">';
         $items_html .= '<a href="'.esc_url($full).'" class="cg-trigger" data-title="'.esc_attr($title).'" data-id="'.$real_global_index.'" data-thumb="'.esc_url($thumb).'">';
-        // QUI AGGIUNTO $video_attr per JS generazione thumb
         $items_html .= '<img src="'.esc_url($thumb).'" alt="'.esc_attr($alt).'" loading="lazy" '.$video_attr.'>';
         
         if($hover_cap && $title) {
@@ -482,7 +506,6 @@ function cg_styles() {
     $shadow = get_option('cg_shadow', 1) ? '0 4px 10px rgba(0,0,0,0.1)' : 'none';
     $protect = get_option('cg_protect');
     
-    // OPZIONE LARGHEZZA SINGOLA
     $single_w = get_option('cg_single_width', 95);
 
     $shape = get_option('cg_shape', 'original');
@@ -511,16 +534,11 @@ function cg_styles() {
         opacity: 0; animation: cg-fadeUp 0.6s ease forwards;
     }
     
-    /* CSS SINGOLA + MAX HEIGHT + FADEIN */
     .cg-wrapper.cg-is-single { display: block !important; text-align: center; }
     .cg-wrapper.cg-is-single .cg-box { 
-        width: <?php echo $single_w; ?>%; 
-        max-width: <?php echo $single_w; ?>%; 
-        margin: 0 auto; 
-        aspect-ratio: auto; 
-        height: auto; 
-        max-height: 80vh;
-        animation: cg-fadeInSimple 1s ease forwards; 
+        width: <?php echo $single_w; ?>%; max-width: <?php echo $single_w; ?>%; margin: 0 auto; 
+        aspect-ratio: auto; height: auto; max-height: 80vh;
+        animation: cg-fadeInSimple 1s ease forwards;
     }
     .cg-wrapper.cg-is-single img, .cg-wrapper.cg-is-single video { width: 100%; height: auto; max-height: 80vh; object-fit: contain; }
 
@@ -653,7 +671,6 @@ function cg_scripts() {
             });
         }
 
-        // GENERATORE THUMBNAIL VIDEO FRONTEND
         function checkVidsFront(){
             const vImgs = document.querySelectorAll('.cg-wrapper img[data-video-src]');
             vImgs.forEach(img => {
@@ -743,7 +760,6 @@ function cg_scripts() {
             const target = visible[currIndex];
             const url = target.getAttribute('href');
             
-            // CHECK VIDEO E PULIZIA
             const isVideo = url.match(/\.(mp4|webm|ogv)$/i);
             const oldMedia = cont.querySelector('.cg-img, .cg-video-lb');
             if(oldMedia) oldMedia.remove();
@@ -876,4 +892,45 @@ function cg_scripts() {
     });
     </script>
     <?php
+}
+
+// --- AGGIUNTA: GENERAZIONE SCHEMA.ORG PROJECT ---
+add_action('wp_footer', 'cg_add_schema_project', 99);
+function cg_add_schema_project() {
+    $is_active = get_option('cg_schema_active');
+    if (empty($is_active)) return;
+    
+    if (!is_singular()) return;
+
+    $allowed_pts = get_option('cg_schema_pts', []);
+    if (!is_array($allowed_pts)) $allowed_pts = (array)$allowed_pts;
+    
+    $current_pt = get_post_type();
+    
+    if (empty($allowed_pts) || !in_array($current_pt, $allowed_pts)) return;
+
+    global $post;
+    
+    $schema = [
+        '@context'    => 'https://schema.org',
+        '@type'       => 'Project',
+        'name'        => get_the_title($post->ID),
+        'url'         => get_permalink($post->ID),
+        'description' => wp_strip_all_tags($post->post_excerpt ?: wp_trim_words($post->post_content, 30))
+    ];
+
+    $brand_name = get_option('cg_schema_brand_text');
+    if (!empty($brand_name)) {
+        $schema['brand'] = [
+            '@type' => 'Organization',
+            'name'  => trim($brand_name)
+        ];
+    }
+
+    if (has_post_thumbnail($post->ID)) {
+        $schema['image'] = get_the_post_thumbnail_url($post->ID, 'full');
+    }
+    
+    echo "\n\n";
+    echo '<script type="application/ld+json">' . wp_json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '</script>' . "\n";
 }
