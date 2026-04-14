@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Creative Gallery
  * Description: Suite Portfolio Auto Image Lightbox and video.
- * Version: 11.9.5
+ * Version: 11.9.6
  * Author: Creative Metrics
  */
 
@@ -70,7 +70,7 @@ function cg_settings_page() {
         <h1>
         <img src="<?php echo esc_url($icon_url); ?>" style="vertical-align:middle; height:40px; width:auto; margin-right:10px;">
         Creative Gallery 
-        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v11.9.5</span></h1>
+        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v11.9.6</span></h1>
         <h2 class="nav-tab-wrapper">
             <a href="?page=creative-gallery-settings&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">Configurazione</a>
             <a href="?page=creative-gallery-settings&tab=guide" class="nav-tab <?php echo $active_tab == 'guide' ? 'nav-tab-active' : ''; ?>">Guida & Definizioni</a>
@@ -306,13 +306,19 @@ function cg_render_box($post) {
             $('#cg-list img[data-video-src]').each(function(){
                 var img = $(this); var src = img.attr('data-video-src');
                 if(!src || img.hasClass('v-done')) return;
-                var v = document.createElement('video'); v.src = src; v.muted=true; v.preload='metadata'; v.currentTime=0.5;
-                v.onloadeddata = function(){
-                    if(v.readyState>=2){
+                var v = document.createElement('video');
+                v.src = src; v.muted=true; v.preload='metadata'; v.setAttribute('playsinline',''); v.crossOrigin='anonymous';
+                
+                v.addEventListener('loadeddata', function() {
+                    v.currentTime = 0.5;
+                });
+                v.addEventListener('seeked', function() {
+                    try {
                         var c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;
                         c.getContext('2d').drawImage(v,0,0); img.attr('src',c.toDataURL()); img.addClass('v-done');
-                    }
-                };
+                    } catch(e) {}
+                });
+                v.load();
             });
         }
         setTimeout(checkVids, 500);
@@ -389,11 +395,13 @@ function cg_render_html($ids, $start_index_global = 0) {
         $full = wp_get_attachment_url($id); 
         $thumb = wp_get_attachment_image_url($id, $thumb_size);
         $video_attr = '';
+        $loading_attr = 'loading="lazy"';
         
         if(!$thumb) {
             $thumb = wp_mime_type_icon($id);
             if(preg_match('/\.(mp4|webm|ogv)$/i', $full)) {
                 $video_attr = ' data-video-src="'.esc_url($full).'" ';
+                $loading_attr = ''; // Impedisce al Lazy Load di interferire con i fotogrammi video
             }
         }
 
@@ -414,7 +422,7 @@ function cg_render_html($ids, $start_index_global = 0) {
 
         $items_html .= '<div class="cg-box cg-anim '.$hidden_class.' cg-cat-all '.$cat_slug.'" data-cat="'.$cat_slug.'">';
         $items_html .= '<a href="'.esc_url($full).'" class="cg-trigger" data-title="'.esc_attr($title).'" data-id="'.$real_global_index.'" data-thumb="'.esc_url($thumb).'">';
-        $items_html .= '<img src="'.esc_url($thumb).'" alt="'.esc_attr($alt).'" loading="lazy" '.$video_attr.'>';
+        $items_html .= '<img src="'.esc_url($thumb).'" alt="'.esc_attr($alt).'" '.$loading_attr.' '.$video_attr.'>';
         
         if($hover_cap && $title) {
             $items_html .= '<div class="cg-overlay"><span>'.esc_html($title).'</span></div>';
@@ -677,17 +685,41 @@ function cg_scripts() {
                 if(img.classList.contains('v-done')) return;
                 const src = img.getAttribute('data-video-src');
                 const v = document.createElement('video');
-                v.src = src; v.muted=true; v.preload='metadata'; v.currentTime=0.5;
-                v.onloadeddata = function(){
-                    if(v.readyState>=2){
-                        const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;
-                        c.getContext('2d').drawImage(v,0,0); 
-                        img.src=c.toDataURL(); img.classList.add('v-done');
+                v.src = src; 
+                v.muted = true; 
+                v.setAttribute('playsinline', ''); 
+                v.crossOrigin = 'anonymous';
+                v.preload = 'metadata';
+                
+                v.addEventListener('loadeddata', function() {
+                    v.currentTime = 0.5;
+                });
+                
+                v.addEventListener('seeked', function() {
+                    try {
+                        const c = document.createElement('canvas');
+                        c.width = v.videoWidth;
+                        c.height = v.videoHeight;
+                        c.getContext('2d').drawImage(v, 0, 0);
+                        const dataUrl = c.toDataURL();
+                        
+                        img.src = dataUrl;
+                        // Bypass dei plugin di Lazy Load (WP Rocket, Litespeed, ecc.)
+                        img.setAttribute('data-src', dataUrl);
+                        img.setAttribute('data-lazy-src', dataUrl);
+                        img.classList.remove('lazyload', 'lazy');
+                        img.classList.add('v-done', 'lazyloaded');
+                    } catch(e) {
+                        img.classList.add('v-done');
                     }
-                };
+                });
+                v.load();
             });
         }
+        
+        checkVidsFront();
         setTimeout(checkVidsFront, 500);
+        window.addEventListener('load', checkVidsFront);
 
         let currIndex = 0;
         
