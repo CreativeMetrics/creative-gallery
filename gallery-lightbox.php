@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Creative Gallery
  * Description: Suite Portfolio Auto Image Lightbox and video.
- * Version: 11.9.6
+ * Version: 11.9.7
  * Author: Creative Metrics
  */
 
@@ -39,6 +39,7 @@ function cg_register_settings() {
     register_setting('cg_opt_group', 'cg_shape', ['default' => 'original']);
     register_setting('cg_opt_group', 'cg_hover_caption');
     register_setting('cg_opt_group', 'cg_bg_color', ['default' => '#000000']);
+    register_setting('cg_opt_group', 'cg_video_icon_color', ['default' => '#ffffff']); // NUOVA OPZIONE ICONA
     register_setting('cg_opt_group', 'cg_fullscreen', ['default' => 1]);
     register_setting('cg_opt_group', 'cg_zoom', ['default' => 1]);
     register_setting('cg_opt_group', 'cg_protect');
@@ -70,7 +71,7 @@ function cg_settings_page() {
         <h1>
         <img src="<?php echo esc_url($icon_url); ?>" style="vertical-align:middle; height:40px; width:auto; margin-right:10px;">
         Creative Gallery 
-        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v11.9.6</span></h1>
+        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v11.9.7</span></h1>
         <h2 class="nav-tab-wrapper">
             <a href="?page=creative-gallery-settings&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">Configurazione</a>
             <a href="?page=creative-gallery-settings&tab=guide" class="nav-tab <?php echo $active_tab == 'guide' ? 'nav-tab-active' : ''; ?>">Guida & Definizioni</a>
@@ -150,6 +151,10 @@ function cg_settings_page() {
                         
                         <tr valign="top"><th scope="row">Sfondo Lightbox:</th><td>
                             <input type="color" name="cg_bg_color" value="<?php echo esc_attr(get_option('cg_bg_color', '#000000')); ?>" style="vertical-align:middle; cursor:pointer;">
+                        </td></tr>
+
+                        <tr valign="top"><th scope="row">Colore Icona Play:</th><td>
+                            <input type="color" name="cg_video_icon_color" value="<?php echo esc_attr(get_option('cg_video_icon_color', '#ffffff')); ?>" style="vertical-align:middle; cursor:pointer;">
                         </td></tr>
 
                         <tr valign="top"><th scope="row">Strumenti:</th><td>
@@ -306,19 +311,13 @@ function cg_render_box($post) {
             $('#cg-list img[data-video-src]').each(function(){
                 var img = $(this); var src = img.attr('data-video-src');
                 if(!src || img.hasClass('v-done')) return;
-                var v = document.createElement('video');
-                v.src = src; v.muted=true; v.preload='metadata'; v.setAttribute('playsinline',''); v.crossOrigin='anonymous';
-                
-                v.addEventListener('loadeddata', function() {
-                    v.currentTime = 0.5;
-                });
-                v.addEventListener('seeked', function() {
-                    try {
+                var v = document.createElement('video'); v.src = src; v.muted=true; v.preload='metadata'; v.currentTime=0.5;
+                v.onloadeddata = function(){
+                    if(v.readyState>=2){
                         var c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;
                         c.getContext('2d').drawImage(v,0,0); img.attr('src',c.toDataURL()); img.addClass('v-done');
-                    } catch(e) {}
-                });
-                v.load();
+                    }
+                };
             });
         }
         setTimeout(checkVids, 500);
@@ -394,15 +393,21 @@ function cg_render_html($ids, $start_index_global = 0) {
         $real_global_index = $start_index_global + $i;
         $full = wp_get_attachment_url($id); 
         $thumb = wp_get_attachment_image_url($id, $thumb_size);
+        
+        // MODIFICA: Logica di rilevamento video robusta
         $video_attr = '';
         $loading_attr = 'loading="lazy"';
+        $video_icon_html = '';
+        $is_video = preg_match('/\.(mp4|webm|ogv)$/i', $full);
         
+        if($is_video) {
+            $video_attr = ' data-video-src="'.esc_url($full).'" ';
+            $loading_attr = ''; // Togliamo il lazy load nativo per permettere al JS di scavalcare i plugin di cache
+            $video_icon_html = '<div class="cg-video-icon"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>';
+        }
+
         if(!$thumb) {
             $thumb = wp_mime_type_icon($id);
-            if(preg_match('/\.(mp4|webm|ogv)$/i', $full)) {
-                $video_attr = ' data-video-src="'.esc_url($full).'" ';
-                $loading_attr = ''; // Impedisce al Lazy Load di interferire con i fotogrammi video
-            }
         }
 
         $meta = get_post($id);
@@ -423,6 +428,8 @@ function cg_render_html($ids, $start_index_global = 0) {
         $items_html .= '<div class="cg-box cg-anim '.$hidden_class.' cg-cat-all '.$cat_slug.'" data-cat="'.$cat_slug.'">';
         $items_html .= '<a href="'.esc_url($full).'" class="cg-trigger" data-title="'.esc_attr($title).'" data-id="'.$real_global_index.'" data-thumb="'.esc_url($thumb).'">';
         $items_html .= '<img src="'.esc_url($thumb).'" alt="'.esc_attr($alt).'" '.$loading_attr.' '.$video_attr.'>';
+        
+        $items_html .= $video_icon_html; // Inserisce l'icona Play sopra l'immagine se è un video
         
         if($hover_cap && $title) {
             $items_html .= '<div class="cg-overlay"><span>'.esc_html($title).'</span></div>';
@@ -509,6 +516,7 @@ function cg_styles() {
     $cols = get_option('cg_columns', 4);
     $bg = get_option('cg_bg_color', '#000000');
     list($r, $g, $b) = sscanf($bg, "#%02x%02x%02x");
+    $vid_icon_color = get_option('cg_video_icon_color', '#ffffff'); // Colore Play Icon
     $gap = get_option('cg_gap', 15);
     $rad = get_option('cg_radius', 6);
     $shadow = get_option('cg_shadow', 1) ? '0 4px 10px rgba(0,0,0,0.1)' : 'none';
@@ -560,12 +568,17 @@ function cg_styles() {
     .cg-masonry { column-count: 2; column-gap: <?php echo $gap; ?>px; }
     .cg-masonry .cg-box { break-inside: avoid; margin-bottom: <?php echo $gap; ?>px; }
     
+    /* ICONA VIDEO PLAY */
+    .cg-video-icon { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:45px; height:45px; pointer-events:none; z-index:5; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.6)); opacity:0.9; transition:transform 0.3s, opacity 0.3s; }
+    .cg-video-icon svg { width:100%; height:100%; fill:<?php echo esc_attr($vid_icon_color); ?>; }
+    .cg-box:hover .cg-video-icon { transform:translate(-50%,-50%) scale(1.15); opacity:1; }
+
     .cg-effect-zoom .cg-box:hover img { transform: scale(1.05); }
     .cg-effect-bw .cg-box img { filter: grayscale(100%); } .cg-effect-bw .cg-box:hover img { filter: grayscale(0%); transform: scale(1.03); }
     .cg-effect-blur .cg-box img { filter: blur(3px); transform: scale(1.03); } .cg-effect-blur .cg-box:hover img { filter: blur(0px); transform: scale(1); }
     .cg-effect-sepia .cg-box img { filter: sepia(100%); } .cg-effect-sepia .cg-box:hover img { filter: sepia(0%); transform: scale(1.03); }
 
-    .cg-overlay { position:absolute; bottom:0; left:0; width:100%; background:linear-gradient(to top, rgba(0,0,0,0.8), transparent); padding:30px 10px 10px; opacity:0; transition:opacity 0.3s; pointer-events:none; }
+    .cg-overlay { position:absolute; bottom:0; left:0; width:100%; background:linear-gradient(to top, rgba(0,0,0,0.8), transparent); padding:30px 10px 10px; opacity:0; transition:opacity 0.3s; pointer-events:none; z-index:10; }
     .cg-overlay span { color:#fff; font-size:14px; font-weight:500; text-shadow:0 1px 2px rgba(0,0,0,0.5); }
     <?php if($shape === 'circle'): ?>
     .cg-box .cg-overlay { top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; text-align: center; background: rgba(0,0,0,0.4); border-radius: 50%; padding: 20px; }
@@ -704,7 +717,7 @@ function cg_scripts() {
                         const dataUrl = c.toDataURL();
                         
                         img.src = dataUrl;
-                        // Bypass dei plugin di Lazy Load (WP Rocket, Litespeed, ecc.)
+                        // Bypass aggressivo dei plugin di cache e Lazy Load
                         img.setAttribute('data-src', dataUrl);
                         img.setAttribute('data-lazy-src', dataUrl);
                         img.classList.remove('lazyload', 'lazy');
