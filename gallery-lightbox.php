@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Creative Gallery
  * Description: Suite Portfolio Auto Image Lightbox and video.
- * Version: 11.9.7
+ * Version: 11.9.8
  * Author: Creative Metrics
  */
 
@@ -39,7 +39,7 @@ function cg_register_settings() {
     register_setting('cg_opt_group', 'cg_shape', ['default' => 'original']);
     register_setting('cg_opt_group', 'cg_hover_caption');
     register_setting('cg_opt_group', 'cg_bg_color', ['default' => '#000000']);
-    register_setting('cg_opt_group', 'cg_video_icon_color', ['default' => '#ffffff']); // NUOVA OPZIONE ICONA
+    register_setting('cg_opt_group', 'cg_video_icon_color', ['default' => '#ffffff']);
     register_setting('cg_opt_group', 'cg_fullscreen', ['default' => 1]);
     register_setting('cg_opt_group', 'cg_zoom', ['default' => 1]);
     register_setting('cg_opt_group', 'cg_protect');
@@ -71,7 +71,7 @@ function cg_settings_page() {
         <h1>
         <img src="<?php echo esc_url($icon_url); ?>" style="vertical-align:middle; height:40px; width:auto; margin-right:10px;">
         Creative Gallery 
-        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v11.9.7</span></h1>
+        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v11.9.8</span></h1>
         <h2 class="nav-tab-wrapper">
             <a href="?page=creative-gallery-settings&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">Configurazione</a>
             <a href="?page=creative-gallery-settings&tab=guide" class="nav-tab <?php echo $active_tab == 'guide' ? 'nav-tab-active' : ''; ?>">Guida & Definizioni</a>
@@ -394,7 +394,6 @@ function cg_render_html($ids, $start_index_global = 0) {
         $full = wp_get_attachment_url($id); 
         $thumb = wp_get_attachment_image_url($id, $thumb_size);
         
-        // MODIFICA: Logica di rilevamento video robusta
         $video_attr = '';
         $loading_attr = 'loading="lazy"';
         $video_icon_html = '';
@@ -402,7 +401,7 @@ function cg_render_html($ids, $start_index_global = 0) {
         
         if($is_video) {
             $video_attr = ' data-video-src="'.esc_url($full).'" ';
-            $loading_attr = ''; // Togliamo il lazy load nativo per permettere al JS di scavalcare i plugin di cache
+            $loading_attr = '';
             $video_icon_html = '<div class="cg-video-icon"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>';
         }
 
@@ -429,7 +428,7 @@ function cg_render_html($ids, $start_index_global = 0) {
         $items_html .= '<a href="'.esc_url($full).'" class="cg-trigger" data-title="'.esc_attr($title).'" data-id="'.$real_global_index.'" data-thumb="'.esc_url($thumb).'">';
         $items_html .= '<img src="'.esc_url($thumb).'" alt="'.esc_attr($alt).'" '.$loading_attr.' '.$video_attr.'>';
         
-        $items_html .= $video_icon_html; // Inserisce l'icona Play sopra l'immagine se è un video
+        $items_html .= $video_icon_html; 
         
         if($hover_cap && $title) {
             $items_html .= '<div class="cg-overlay"><span>'.esc_html($title).'</span></div>';
@@ -516,7 +515,7 @@ function cg_styles() {
     $cols = get_option('cg_columns', 4);
     $bg = get_option('cg_bg_color', '#000000');
     list($r, $g, $b) = sscanf($bg, "#%02x%02x%02x");
-    $vid_icon_color = get_option('cg_video_icon_color', '#ffffff'); // Colore Play Icon
+    $vid_icon_color = get_option('cg_video_icon_color', '#ffffff');
     $gap = get_option('cg_gap', 15);
     $rad = get_option('cg_radius', 6);
     $shadow = get_option('cg_shadow', 1) ? '0 4px 10px rgba(0,0,0,0.1)' : 'none';
@@ -568,7 +567,6 @@ function cg_styles() {
     .cg-masonry { column-count: 2; column-gap: <?php echo $gap; ?>px; }
     .cg-masonry .cg-box { break-inside: avoid; margin-bottom: <?php echo $gap; ?>px; }
     
-    /* ICONA VIDEO PLAY */
     .cg-video-icon { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:45px; height:45px; pointer-events:none; z-index:5; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.6)); opacity:0.9; transition:transform 0.3s, opacity 0.3s; }
     .cg-video-icon svg { width:100%; height:100%; fill:<?php echo esc_attr($vid_icon_color); ?>; }
     .cg-box:hover .cg-video-icon { transform:translate(-50%,-50%) scale(1.15); opacity:1; }
@@ -717,11 +715,27 @@ function cg_scripts() {
                         const dataUrl = c.toDataURL();
                         
                         img.src = dataUrl;
-                        // Bypass aggressivo dei plugin di cache e Lazy Load
                         img.setAttribute('data-src', dataUrl);
                         img.setAttribute('data-lazy-src', dataUrl);
                         img.classList.remove('lazyload', 'lazy');
                         img.classList.add('v-done', 'lazyloaded');
+                        
+                        // AGGIORNAMENTO: Salva il fotogramma nell'attributo del lightbox per la filmstrip
+                        const trigger = img.closest('.cg-trigger');
+                        if (trigger) {
+                            trigger.setAttribute('data-thumb', dataUrl);
+                            
+                            // Se il lightbox e la filmstrip sono già aperti, aggiorna live
+                            const strip = document.querySelector('.cg-filmstrip');
+                            if (strip) {
+                                const visibleTriggers = getVisibleTriggers();
+                                const idx = visibleTriggers.indexOf(trigger);
+                                if (idx !== -1) {
+                                    const thumbItem = strip.querySelector('.cg-thumb-item[data-idx="' + idx + '"]');
+                                    if (thumbItem) thumbItem.src = dataUrl;
+                                }
+                            }
+                        }
                     } catch(e) {
                         img.classList.add('v-done');
                     }
