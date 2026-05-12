@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Creative Gallery
  * Description: Suite Portfolio Auto Image Lightbox and video.
- * Version: 11.9.8
+ * Version: 11.9.9
  * Author: Creative Metrics
  */
 
@@ -71,7 +71,7 @@ function cg_settings_page() {
         <h1>
         <img src="<?php echo esc_url($icon_url); ?>" style="vertical-align:middle; height:40px; width:auto; margin-right:10px;">
         Creative Gallery 
-        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v11.9.8</span></h1>
+        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v11.9.9</span></h1>
         <h2 class="nav-tab-wrapper">
             <a href="?page=creative-gallery-settings&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">Configurazione</a>
             <a href="?page=creative-gallery-settings&tab=guide" class="nav-tab <?php echo $active_tab == 'guide' ? 'nav-tab-active' : ''; ?>">Guida & Definizioni</a>
@@ -720,12 +720,10 @@ function cg_scripts() {
                         img.classList.remove('lazyload', 'lazy');
                         img.classList.add('v-done', 'lazyloaded');
                         
-                        // AGGIORNAMENTO: Salva il fotogramma nell'attributo del lightbox per la filmstrip
                         const trigger = img.closest('.cg-trigger');
                         if (trigger) {
                             trigger.setAttribute('data-thumb', dataUrl);
                             
-                            // Se il lightbox e la filmstrip sono già aperti, aggiorna live
                             const strip = document.querySelector('.cg-filmstrip');
                             if (strip) {
                                 const visibleTriggers = getVisibleTriggers();
@@ -988,6 +986,20 @@ function cg_add_schema_project() {
 
     if (has_post_thumbnail($post->ID)) {
         $schema['image'] = get_the_post_thumbnail_url($post->ID, 'full');
+    }
+    
+    // AGGIUNTA LOCALITA' DINAMICA (Provincia presa dal tag installazioni)
+    $location_tags = get_the_terms($post->ID, 'tag-installazioni');
+    if ($location_tags && !is_wp_error($location_tags)) {
+        $province = $location_tags[0]->name;
+        $schema['location'] = [
+            '@type' => 'Place',
+            'address' => [
+                '@type' => 'PostalAddress',
+                'addressRegion' => $province,
+                'addressCountry' => 'IT'
+            ]
+        ];
     }
     
     echo "\n\n";
