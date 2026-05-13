@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Creative Gallery
  * Description: Suite Portfolio Auto Image Lightbox and video.
- * Version: 11.9.9
+ * Version: 12.0.2
  * Author: Creative Metrics
  */
 
@@ -51,12 +51,10 @@ function cg_register_settings() {
     register_setting('cg_opt_group', 'cg_social', ['default' => 1]); 
     register_setting('cg_opt_group', 'cg_debug_mode', ['default' => 0]); 
     register_setting('cg_opt_group', 'cg_single_width', ['default' => 95]);
-    
-    // NOTA: Le opzioni Schema NON sono registrate qui per bypassare il blocco di options.php
 }
 
 function cg_settings_page() {
-    // SALVATAGGIO FORZATO E MANUALE DELLO SCHEMA
+    // SALVATAGGIO FORZATO DELLO SCHEMA
     if (isset($_POST['cg_schema_submit']) && current_user_can('manage_options')) {
         update_option('cg_schema_active', isset($_POST['cg_schema_active']) ? 1 : 0);
         update_option('cg_schema_pts', isset($_POST['cg_schema_pts']) && is_array($_POST['cg_schema_pts']) ? $_POST['cg_schema_pts'] : []);
@@ -71,7 +69,7 @@ function cg_settings_page() {
         <h1>
         <img src="<?php echo esc_url($icon_url); ?>" style="vertical-align:middle; height:40px; width:auto; margin-right:10px;">
         Creative Gallery 
-        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v11.9.9</span></h1>
+        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v12.0.2</span></h1>
         <h2 class="nav-tab-wrapper">
             <a href="?page=creative-gallery-settings&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">Configurazione</a>
             <a href="?page=creative-gallery-settings&tab=guide" class="nav-tab <?php echo $active_tab == 'guide' ? 'nav-tab-active' : ''; ?>">Guida & Definizioni</a>
@@ -241,6 +239,40 @@ function cg_settings_page() {
     <?php
 }
 
+// --- AGGIUNTA CAMPI PER VIDEO ESTERNI NELLA LIBRERIA MEDIA ---
+add_filter( 'attachment_fields_to_edit', 'cg_media_custom_fields', 10, 2 );
+function cg_media_custom_fields( $form_fields, $post ) {
+    $form_fields['cg_external_video'] = array(
+        'label' => 'URL Video Esterno',
+        'input' => 'text',
+        'value' => get_post_meta( $post->ID, '_cg_external_video', true ),
+        'helps' => 'Inserisci link YouTube o Vimeo. L\'immagine fungerà da copertina nel sito e il video si aprirà nel lightbox.',
+    );
+    return $form_fields;
+}
+
+add_filter( 'attachment_fields_to_save', 'cg_media_custom_fields_save', 10, 2 );
+function cg_media_custom_fields_save( $post, $attachment ) {
+    if ( isset( $attachment['cg_external_video'] ) ) {
+        update_post_meta( $post['ID'], '_cg_external_video', sanitize_text_field( $attachment['cg_external_video'] ) );
+    }
+    return $post;
+}
+
+// Helper: Estrapola Embed URL pulito da YouTube/Vimeo
+function cg_get_embed_url($url) {
+    if (strpos($url, 'youtube.com') !== false || strpos($url, 'youtu.be') !== false) {
+        if (preg_match('%(?:youtube(?:-nocookie)?\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?|shorts)/|.*[?&]v=)|youtu\.be/)([^"&?/ ]{11})%i', $url, $match)) {
+            return 'https://www.youtube.com/embed/' . $match[1] . '?autoplay=1&rel=0';
+        }
+    } elseif (strpos($url, 'vimeo.com') !== false) {
+        if (preg_match('/vimeo\.com\/([0-9]+)/i', $url, $match)) {
+            return 'https://player.vimeo.com/video/' . $match[1] . '?autoplay=1';
+        }
+    }
+    return $url;
+}
+
 // --- 2. BACKEND ---
 add_action('admin_enqueue_scripts', 'cg_admin_scripts');
 function cg_admin_scripts($hook) {
@@ -378,12 +410,16 @@ function cg_render_html($ids, $start_index_global = 0) {
     $hover_effect = get_option('cg_hover_effect', 'zoom');
     $filters_active = get_option('cg_filters', 0);
 
-    $is_single_class = (count($ids) === 1) ? ' cg-is-single' : '';
+    // Conta gli elementi nel blocco per calcolare la classe
+    $item_count = count($ids);
+    $is_single_class = ($item_count === 1) ? ' cg-is-single' : '';
+    $is_two_class    = ($item_count === 2) ? ' cg-is-2' : '';
+    $is_three_class  = ($item_count === 3) ? ' cg-is-3' : '';
 
     $cls = $masonry ? 'cg-masonry' : 'cg-grid';
     if($hover_cap) $cls .= ' cg-has-captions';
     $cls .= ' cg-effect-' . $hover_effect;
-    $cls .= $is_single_class;
+    $cls .= $is_single_class . $is_two_class . $is_three_class;
 
     $categories = [];
     $items_html = '';
@@ -397,11 +433,19 @@ function cg_render_html($ids, $start_index_global = 0) {
         $video_attr = '';
         $loading_attr = 'loading="lazy"';
         $video_icon_html = '';
-        $is_video = preg_match('/\.(mp4|webm|ogv)$/i', $full);
         
-        if($is_video) {
+        // Verifica video esterno (YouTube/Vimeo)
+        $ext_video = get_post_meta($id, '_cg_external_video', true);
+        $is_local_video = preg_match('/\.(mp4|webm|ogv)$/i', $full);
+        
+        if (!empty($ext_video)) {
+            $embed_url = cg_get_embed_url($ext_video);
+            $video_attr = ' data-iframe-src="'.esc_url($embed_url).'" ';
+            $loading_attr = 'loading="lazy"'; // La copertina esterna è un'immagine sicura
+            $video_icon_html = '<div class="cg-video-icon"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>';
+        } elseif ($is_local_video) {
             $video_attr = ' data-video-src="'.esc_url($full).'" ';
-            $loading_attr = '';
+            $loading_attr = ''; // Togliamo lazy load per i frame generati in JS
             $video_icon_html = '<div class="cg-video-icon"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>';
         }
 
@@ -425,8 +469,8 @@ function cg_render_html($ids, $start_index_global = 0) {
         $hidden_class = ($per_page > 0 && $i >= $per_page) ? 'cg-hidden-page' : '';
 
         $items_html .= '<div class="cg-box cg-anim '.$hidden_class.' cg-cat-all '.$cat_slug.'" data-cat="'.$cat_slug.'">';
-        $items_html .= '<a href="'.esc_url($full).'" class="cg-trigger" data-title="'.esc_attr($title).'" data-id="'.$real_global_index.'" data-thumb="'.esc_url($thumb).'">';
-        $items_html .= '<img src="'.esc_url($thumb).'" alt="'.esc_attr($alt).'" '.$loading_attr.' '.$video_attr.'>';
+        $items_html .= '<a href="'.esc_url($full).'" class="cg-trigger" data-title="'.esc_attr($title).'" data-id="'.$real_global_index.'" data-thumb="'.esc_url($thumb).'" '.$video_attr.'>';
+        $items_html .= '<img src="'.esc_url($thumb).'" alt="'.esc_attr($alt).'" '.$loading_attr.'>';
         
         $items_html .= $video_icon_html; 
         
@@ -584,15 +628,30 @@ function cg_styles() {
     <?php endif; ?>
     .cg-has-captions .cg-box:hover .cg-overlay { opacity:1; }
 
-    @media (min-width: 1025px) { .cg-grid { grid-template-columns: repeat(<?php echo $cols; ?>, 1fr); } .cg-masonry { column-count: <?php echo $cols; ?>; } }
-    @media (max-width: 767px) { .cg-grid { grid-template-columns: 1fr 1fr; gap: 10px; } .cg-masonry { column-count: 2; column-gap: 10px; } .cg-wrapper.cg-is-single .cg-box { width: 100%; max-width: 100%; } }
+    @media (min-width: 1025px) { 
+        .cg-grid { grid-template-columns: repeat(<?php echo $cols; ?>, 1fr); } 
+        .cg-masonry { column-count: <?php echo $cols; ?>; } 
+        .cg-grid.cg-is-2 { grid-template-columns: repeat(2, 1fr) !important; }
+        .cg-masonry.cg-is-2 { column-count: 2 !important; }
+        .cg-grid.cg-is-3 { grid-template-columns: repeat(3, 1fr) !important; }
+        .cg-masonry.cg-is-3 { column-count: 3 !important; }
+    }
+    @media (min-width: 768px) and (max-width: 1024px) {
+        .cg-grid.cg-is-2 { grid-template-columns: repeat(2, 1fr) !important; }
+    }
+    @media (max-width: 767px) { 
+        .cg-grid { grid-template-columns: 1fr 1fr; gap: 10px; } 
+        .cg-masonry { column-count: 2; column-gap: 10px; } 
+        .cg-wrapper.cg-is-single .cg-box { width: 100%; max-width: 100%; } 
+    }
 
     #cg-lb { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(<?php echo "$r,$g,$b"; ?>,0.95); display:flex; z-index:999999; opacity:0; visibility:hidden; transition:opacity 0.3s; flex-direction: column; }
     #cg-lb.on { opacity:1; visibility:visible; }
     .cg-in { position:relative; width:100%; flex: 1; display:flex; align-items:center; justify-content:center; overflow:hidden; }
-    .cg-img, .cg-video-lb { max-width:85%; max-height:80vh; border-radius:4px; box-shadow:0 0 40px rgba(0,0,0,0.5); transition: opacity 0.3s; opacity: 0; }
+    .cg-img, .cg-video-lb, .cg-iframe-lb { max-width:85%; max-height:80vh; border-radius:4px; box-shadow:0 0 40px rgba(0,0,0,0.5); transition: opacity 0.3s; opacity: 0; }
+    .cg-iframe-lb { width: 85vw; height: 80vh; max-width: 1200px; background: #000; border: none; }
     .cg-img { cursor: zoom-in; }
-    .cg-img.loaded, .cg-video-lb.loaded { opacity: 1; }
+    .cg-img.loaded, .cg-video-lb.loaded, .cg-iframe-lb.loaded { opacity: 1; }
     .cg-img.zoomed { transform: scale(2.5); cursor: zoom-out; max-width: 85%; max-height: 85vh; }
 
     .cg-filmstrip { width: 100%; height: 70px; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; gap: 10px; overflow-x: auto; padding: 0 10px; white-space: nowrap; scroll-behavior: smooth; }
@@ -615,12 +674,13 @@ function cg_styles() {
     .cg-prev{top:50%; left:20px; transform:translateY(-50%);} .cg-next{top:50%; right:20px; transform:translateY(-50%);} .cg-close{top:20px; right:20px;} 
     .cg-full{top:20px; right:80px;} .cg-zoom-btn{top:20px; right:140px;}
     
-    .cg-meta { position:absolute; bottom:20px; width:100%; text-align:center; color:#fff; pointer-events:none; }
+    .cg-meta { position:absolute; bottom:20px; width:100%; text-align:center; color:#fff; pointer-events:none; z-index:1003; }
     .cg-cap { font-size:16px; text-shadow:0 1px 3px rgba(0,0,0,0.8); display:block; margin-bottom:5px; }
     .cg-num { font-size:12px; opacity:0.7; font-family:sans-serif; background:rgba(0,0,0,0.3); padding:2px 8px; border-radius:10px; }
 
     @media (max-width: 767px) { 
-        .cg-img, .cg-video-lb { max-width:95%; } 
+        .cg-img, .cg-video-lb { max-width:95%; }
+        .cg-iframe-lb { width: 95vw; height: 75vh; } 
         .cg-btn { width:40px; height:40px; background:rgba(0,0,0,0.3); } .cg-btn svg { width:22px; height:22px; }
         .cg-prev{left:10px} .cg-next{right:10px} .cg-close{right:10px; top:10px;} 
         .cg-full{display:none;} .cg-zoom-btn{right:60px; top:10px;}
@@ -818,11 +878,23 @@ function cg_scripts() {
             const url = target.getAttribute('href');
             
             const isVideo = url.match(/\.(mp4|webm|ogv)$/i);
-            const oldMedia = cont.querySelector('.cg-img, .cg-video-lb');
+            const iframeSrc = target.getAttribute('data-iframe-src');
+            
+            const oldMedia = cont.querySelector('.cg-img, .cg-video-lb, .cg-iframe-lb');
             if(oldMedia) oldMedia.remove();
             resetZoom();
 
-            if(isVideo) {
+            if (iframeSrc) {
+                const iframe = document.createElement('iframe');
+                iframe.src = iframeSrc;
+                iframe.className = 'cg-iframe-lb';
+                iframe.setAttribute('allow', 'autoplay; fullscreen');
+                iframe.setAttribute('allowfullscreen', '');
+                iframe.setAttribute('frameborder', '0');
+                cont.appendChild(iframe);
+                setTimeout(() => iframe.classList.add('loaded'), 50);
+                if(lb.querySelector('.cg-zoom-btn')) lb.querySelector('.cg-zoom-btn').style.display = 'none';
+            } else if (isVideo) {
                 const v = document.createElement('video');
                 v.src = url;
                 v.className = 'cg-video-lb';
@@ -913,7 +985,7 @@ function cg_scripts() {
         
         const close = ()=>{ 
             lb.classList.remove('on'); document.body.style.overflow=''; 
-            const m = cont.querySelector('.cg-img, .cg-video-lb'); if(m) m.remove();
+            const m = cont.querySelector('.cg-img, .cg-video-lb, .cg-iframe-lb'); if(m) m.remove();
             if(document.fullscreenElement) document.exitFullscreen(); 
             if(<?php echo $deep ? 'true' : 'false'; ?>) history.replaceState(null, null, ' '); 
         };
@@ -988,7 +1060,6 @@ function cg_add_schema_project() {
         $schema['image'] = get_the_post_thumbnail_url($post->ID, 'full');
     }
     
-    // AGGIUNTA LOCALITA' DINAMICA (Provincia presa dal tag installazioni)
     $location_tags = get_the_terms($post->ID, 'tag-installazioni');
     if ($location_tags && !is_wp_error($location_tags)) {
         $province = $location_tags[0]->name;
