@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Creative Gallery
  * Description: Suite Portfolio Auto Image Lightbox and video.
- * Version: 12.0.2
+ * Version: 12.0.3
  * Author: Creative Metrics
  */
 
@@ -69,7 +69,7 @@ function cg_settings_page() {
         <h1>
         <img src="<?php echo esc_url($icon_url); ?>" style="vertical-align:middle; height:40px; width:auto; margin-right:10px;">
         Creative Gallery 
-        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v12.0.2</span></h1>
+        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v12.0.3</span></h1>
         <h2 class="nav-tab-wrapper">
             <a href="?page=creative-gallery-settings&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">Configurazione</a>
             <a href="?page=creative-gallery-settings&tab=guide" class="nav-tab <?php echo $active_tab == 'guide' ? 'nav-tab-active' : ''; ?>">Guida & Definizioni</a>
@@ -430,7 +430,8 @@ function cg_render_html($ids, $start_index_global = 0) {
         $full = wp_get_attachment_url($id); 
         $thumb = wp_get_attachment_image_url($id, $thumb_size);
         
-        $video_attr = '';
+        $trigger_attr = '';
+        $img_attr = '';
         $loading_attr = 'loading="lazy"';
         $video_icon_html = '';
         
@@ -440,11 +441,12 @@ function cg_render_html($ids, $start_index_global = 0) {
         
         if (!empty($ext_video)) {
             $embed_url = cg_get_embed_url($ext_video);
-            $video_attr = ' data-iframe-src="'.esc_url($embed_url).'" ';
+            $trigger_attr = ' data-iframe-src="'.esc_url($embed_url).'" ';
             $loading_attr = 'loading="lazy"'; // La copertina esterna è un'immagine sicura
             $video_icon_html = '<div class="cg-video-icon"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>';
         } elseif ($is_local_video) {
-            $video_attr = ' data-video-src="'.esc_url($full).'" ';
+            // FIX v12.0.3: Il data-video-src va applicato al tag <img> per permettere al JS di scambiarlo col fotogramma
+            $img_attr = ' data-video-src="'.esc_url($full).'" ';
             $loading_attr = ''; // Togliamo lazy load per i frame generati in JS
             $video_icon_html = '<div class="cg-video-icon"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div>';
         }
@@ -469,8 +471,8 @@ function cg_render_html($ids, $start_index_global = 0) {
         $hidden_class = ($per_page > 0 && $i >= $per_page) ? 'cg-hidden-page' : '';
 
         $items_html .= '<div class="cg-box cg-anim '.$hidden_class.' cg-cat-all '.$cat_slug.'" data-cat="'.$cat_slug.'">';
-        $items_html .= '<a href="'.esc_url($full).'" class="cg-trigger" data-title="'.esc_attr($title).'" data-id="'.$real_global_index.'" data-thumb="'.esc_url($thumb).'" '.$video_attr.'>';
-        $items_html .= '<img src="'.esc_url($thumb).'" alt="'.esc_attr($alt).'" '.$loading_attr.'>';
+        $items_html .= '<a href="'.esc_url($full).'" class="cg-trigger" data-title="'.esc_attr($title).'" data-id="'.$real_global_index.'" data-thumb="'.esc_url($thumb).'" '.$trigger_attr.'>';
+        $items_html .= '<img src="'.esc_url($thumb).'" alt="'.esc_attr($alt).'" '.$loading_attr.' '.$img_attr.'>';
         
         $items_html .= $video_icon_html; 
         
