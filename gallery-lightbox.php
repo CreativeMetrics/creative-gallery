@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Creative Gallery
  * Description: Suite Portfolio Auto Image Lightbox and video.
- * Version: 12.0.3
+ * Version: 12.1.0
  * Author: Creative Metrics
  */
 
@@ -69,7 +69,7 @@ function cg_settings_page() {
         <h1>
         <img src="<?php echo esc_url($icon_url); ?>" style="vertical-align:middle; height:40px; width:auto; margin-right:10px;">
         Creative Gallery 
-        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v12.0.3</span></h1>
+        <span style="font-size:12px; font-weight:normal; background:#2271b1; color:white; padding:3px 10px; border-radius:12px; vertical-align:middle;">v12.1.0</span></h1>
         <h2 class="nav-tab-wrapper">
             <a href="?page=creative-gallery-settings&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">Configurazione</a>
             <a href="?page=creative-gallery-settings&tab=guide" class="nav-tab <?php echo $active_tab == 'guide' ? 'nav-tab-active' : ''; ?>">Guida & Definizioni</a>
@@ -461,6 +461,7 @@ function cg_render_html($ids, $start_index_global = 0) {
         $title = $meta->post_title;
         $desc = trim($meta->post_content); 
         $alt = get_post_meta($id, '_wp_attachment_image_alt', true);
+        if ($alt === '' || $alt === false) { $alt = $title; } // v12.1.0: alt mai vuoto (accessibilita' e agenti AI)
         
         $cat_slug = '';
         if($filters_active && !empty($desc)) {
@@ -472,7 +473,20 @@ function cg_render_html($ids, $start_index_global = 0) {
 
         $items_html .= '<div class="cg-box cg-anim '.$hidden_class.' cg-cat-all '.$cat_slug.'" data-cat="'.$cat_slug.'">';
         $items_html .= '<a href="'.esc_url($full).'" class="cg-trigger" data-title="'.esc_attr($title).'" data-id="'.$real_global_index.'" data-thumb="'.esc_url($thumb).'" '.$trigger_attr.'>';
-        $items_html .= '<img src="'.esc_url($thumb).'" alt="'.esc_attr($alt).'" '.$loading_attr.' '.$img_attr.'>';
+        // v12.1.0: miniature responsive. Il browser sceglie dal srcset la misura piu' piccola adatta
+        // (es. 300 o 768 px invece dell'originale da 1024+), con width/height per evitare salti di layout.
+        $resp_attr = ' decoding="async"';
+        if (!$is_local_video && wp_attachment_is_image($id)) {
+            $srcset = wp_get_attachment_image_srcset($id, $thumb_size);
+            if ($srcset) {
+                $resp_attr .= ' srcset="'.esc_attr($srcset).'" sizes="'.esc_attr(apply_filters('cg_image_sizes', '(max-width: 600px) 100vw, (max-width: 1000px) 50vw, 400px')).'"';
+            }
+            $img_src = wp_get_attachment_image_src($id, $thumb_size);
+            if ($img_src && !empty($img_src[1]) && !empty($img_src[2])) {
+                $resp_attr .= ' width="'.intval($img_src[1]).'" height="'.intval($img_src[2]).'"';
+            }
+        }
+        $items_html .= '<img src="'.esc_url($thumb).'" alt="'.esc_attr($alt).'" '.$loading_attr.$resp_attr.' '.$img_attr.'>';
         
         $items_html .= $video_icon_html; 
         
@@ -585,7 +599,7 @@ function cg_styles() {
 
     .cg-grid { display: grid; gap: <?php echo $gap; ?>px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
     .cg-box { 
-        position:relative; background:#eee; 
+        position:relative; background:var(--cg-placeholder, #f3f6f7); 
         border-radius: <?php echo $rad; ?>px; 
         <?php echo $override_rad; ?>
         overflow: hidden; 
@@ -602,6 +616,14 @@ function cg_styles() {
         animation: cg-fadeInSimple 1s ease forwards;
     }
     .cg-wrapper.cg-is-single img, .cg-wrapper.cg-is-single video { width: 100%; height: auto; max-height: 80vh; object-fit: contain; }
+
+    /* v12.1.0: segnaposto animato finche' la foto non e' pronta, poi dissolvenza */
+    .cg-js .cg-box::before { content:""; position:absolute; inset:0; z-index:0; pointer-events:none; background:linear-gradient(100deg, rgba(255,255,255,0) 30%, rgba(255,255,255,.7) 50%, rgba(255,255,255,0) 70%); background-size:200% 100%; animation:cg-shimmer 1.4s linear infinite; }
+    .cg-js .cg-box.cg-ok::before { display:none; }
+    .cg-js .cg-box img { opacity:0; }
+    .cg-js .cg-box.cg-ok img { opacity:1; transition:opacity .35s ease, transform 0.5s ease, filter 0.5s ease; }
+    @keyframes cg-shimmer { from { background-position:150% 0; } to { background-position:-50% 0; } }
+    @media (prefers-reduced-motion: reduce) { .cg-js .cg-box::before { animation:none; } }
 
     .cg-box:nth-child(1) { animation-delay: 0.05s; }
     .cg-box:nth-child(2) { animation-delay: 0.1s; }
@@ -705,6 +727,19 @@ function cg_scripts() {
     ?>
     <script>
     document.addEventListener('DOMContentLoaded', function(){
+        // v12.1.0: segnaposto + comparsa della foto quando e' caricata
+        document.querySelectorAll('.cg-wrapper').forEach(w => w.classList.add('cg-js'));
+        const cgOk = img => { const b = img.closest('.cg-box'); if (b) b.classList.add('cg-ok'); };
+        document.querySelectorAll('.cg-box img').forEach(img => {
+            if (img.complete && img.naturalWidth > 0) { cgOk(img); return; }
+            img.addEventListener('load', () => cgOk(img));
+            img.addEventListener('error', () => cgOk(img));
+        });
+        // dopo il caricamento della pagina scarica in anticipo tutte le miniature:
+        // quando l'utente arriva alla galleria sono gia' pronte
+        const cgPrefetch = () => document.querySelectorAll('.cg-box img[loading="lazy"]').forEach(img => { img.loading = 'eager'; });
+        if (document.readyState === 'complete') cgPrefetch(); else window.addEventListener('load', cgPrefetch);
+
         const wrapper = document.querySelector('.cg-wrapper');
         const loadBtn = document.getElementById('cg-load-more');
         const filterBtns = document.querySelectorAll('.cg-filter-btn');
